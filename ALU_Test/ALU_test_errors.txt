@@ -1,0 +1,177 @@
+﻿============================================
+  ALU TEST RAPORU - BIRLESIK OZET
+  Tarih: 2026-06-06 16:24:19
+  Toplam Sure: 00:32:55
+============================================
+
+=== ALU TEST RAPORU - Opcode 0x00000000 (ADD     ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000128 | Basarili: 3000128 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x00000001 (SUB     ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000128 | Basarili: 3000128 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x00000002 (MUL_LOW ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x00000003 (MUL_HIGH) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x00000004 (AND     ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x00000005 (XOR     ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x00000006 (OR      ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x00000007 (NOT     ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x00000008 (SAR     ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x00000009 (SHR     ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x0000000a (SHL     ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x0000000b (SLT     ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x0000000c (SLTU    ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x0000000d (ROR     ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x0000000e (SERACC  ) ===
+=== OZET ===
+Toplam: 3 | Basarili: 3 | Basarisiz: 0
+
+
+=== ALU TEST RAPORU - Opcode 0x0000000f (LSU     ) ===
+=== OZET ===
+Toplam: 3 | Basarili: 3 | Basarisiz: 0
+
+
+============================================
+  GENEL OZET
+  Toplam Test   : 42001030
+  Toplam Basarili: 42001030
+  Toplam Hatali  : 0
+  Sure          : 00:32:55
+============================================

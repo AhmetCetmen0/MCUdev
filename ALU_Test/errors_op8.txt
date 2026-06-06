@@ -1,0 +1,9 @@
+=== ALU TEST RAPORU - Opcode 0x00000008 (SAR     ) ===
+  Ilerleme: 500000 / 3000000 (16%)
+  Ilerleme: 1000000 / 3000000 (33%)
+  Ilerleme: 1500000 / 3000000 (50%)
+  Ilerleme: 2000000 / 3000000 (66%)
+  Ilerleme: 2500000 / 3000000 (83%)
+  Ilerleme: 3000000 / 3000000 (100%)
+=== OZET ===
+Toplam: 3000064 | Basarili: 3000064 | Basarisiz: 0

@@ -1,0 +1,3 @@
+=== ALU TEST RAPORU - Opcode 0x0000000f (LSU     ) ===
+=== OZET ===
+Toplam: 3 | Basarili: 3 | Basarisiz: 0
