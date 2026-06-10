@@ -3,12 +3,6 @@
   <version>2</version>
   <attributes>
     <entry>
-      <string>romContent</string>
-      <romList>
-        <roms/>
-      </romList>
-    </entry>
-    <entry>
       <string>backgroundColor</string>
       <awt-color>
         <red>153</red>
@@ -18,16 +12,17 @@
       </awt-color>
     </entry>
     <entry>
+      <string>romContent</string>
+      <romList>
+        <roms/>
+      </romList>
+    </entry>
+    <entry>
       <string>Width</string>
       <int>10</int>
     </entry>
   </attributes>
   <visualElements>
-    <visualElement>
-      <elementName>16-BitMuxWithEnablePin.dig</elementName>
-      <elementAttributes/>
-      <pos x="100" y="160"/>
-    </visualElement>
     <visualElement>
       <elementName>Add</elementName>
       <elementAttributes>
@@ -993,12 +988,12 @@
       <elementName>Comparator</elementName>
       <elementAttributes>
         <entry>
-          <string>Bits</string>
-          <int>16</int>
-        </entry>
-        <entry>
           <string>Signed</string>
           <boolean>true</boolean>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>16</int>
         </entry>
       </elementAttributes>
       <pos x="11380" y="220"/>
@@ -1250,7 +1245,7 @@
       <elementAttributes>
         <entry>
           <string>Label</string>
-          <string>SERACC_EN</string>
+          <string>SCU_EN</string>
         </entry>
       </elementAttributes>
       <pos x="300" y="780"/>
@@ -1320,12 +1315,12 @@
       <elementName>Multiplexer</elementName>
       <elementAttributes>
         <entry>
-          <string>Bits</string>
-          <int>16</int>
-        </entry>
-        <entry>
           <string>Selector Bits</string>
           <int>2</int>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>16</int>
         </entry>
       </elementAttributes>
       <pos x="8960" y="-900"/>
@@ -1334,12 +1329,12 @@
       <elementName>Multiplexer</elementName>
       <elementAttributes>
         <entry>
-          <string>Bits</string>
-          <int>4</int>
-        </entry>
-        <entry>
           <string>Selector Bits</string>
           <int>2</int>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>4</int>
         </entry>
       </elementAttributes>
       <pos x="9000" y="-640"/>
@@ -1483,12 +1478,12 @@
       <elementName>Demultiplexer</elementName>
       <elementAttributes>
         <entry>
-          <string>Bits</string>
-          <int>16</int>
-        </entry>
-        <entry>
           <string>Selector Bits</string>
           <int>2</int>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>16</int>
         </entry>
       </elementAttributes>
       <pos x="9780" y="-580"/>
@@ -1512,6 +1507,11 @@
         </entry>
       </elementAttributes>
       <pos x="300" y="740"/>
+    </visualElement>
+    <visualElement>
+      <elementName>16-BitDecoderWithEnablePin.dig</elementName>
+      <elementAttributes/>
+      <pos x="100" y="160"/>
     </visualElement>
   </visualElements>
   <wires>
