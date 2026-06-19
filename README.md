@@ -1,2 +1,2 @@
 # MCUdev
-I am trying to build an MCU from scratch. I will run it on an FPGA.
+I'm trying to develop an MCU from scratch. Once I'm done, I'll run it on an FPGA.
