@@ -19,7 +19,7 @@
     </entry>
     <entry>
       <string>Width</string>
-      <int>6</int>
+      <int>7</int>
     </entry>
   </attributes>
   <visualElements>
@@ -348,7 +348,7 @@
       <elementAttributes>
         <entry>
           <string>Label</string>
-          <string>IsEn?_MUX</string>
+          <string>IsEn?_Decoder</string>
         </entry>
       </elementAttributes>
       <pos x="40" y="120"/>
