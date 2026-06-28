@@ -41,7 +41,7 @@ module Decoder4 (
 endmodule
 
 
-module \16_BitMuxWithEnablePin  (
+module \16_BitDecoderWithEnablePin  (
   input EN,
   input [3:0] Sel_4Bit,
   output Q0,
@@ -113,6 +113,31 @@ module \16_BitMuxWithEnablePin  (
   assign Q14 = (EN & s14);
   assign Q15 = (EN & s15);
 endmodule
+module DIG_D_FF_Nbit
+#(
+    parameter Bits = 2,
+    parameter Default = 0
+)
+(
+   input [(Bits-1):0] D,
+   input C,
+   output [(Bits-1):0] Q,
+   output [(Bits-1):0] \~Q
+);
+    reg [(Bits-1):0] state;
+
+    assign Q = state;
+    assign \~Q = ~state;
+
+    always @ (posedge C) begin
+        state <= D;
+    end
+
+    initial begin
+        state = Default;
+    end
+endmodule
+
 module DIG_D_FF_1bit
 #(
     parameter Default = 0
@@ -139,7 +164,7 @@ endmodule
 
 
 module ALU_RegCtrl (
-  input \IsEn?_MUX ,
+  input \IsEn?_Decoder ,
   input CLK,
   input \0x0 ,
   input \0x1 ,
@@ -157,6 +182,7 @@ module ALU_RegCtrl (
   input \0xD ,
   input \0xE ,
   input \0xF ,
+  input [3:0] OPCODE_IN,
   output Q_0,
   output Q_1,
   output Q_2,
@@ -173,7 +199,8 @@ module ALU_RegCtrl (
   output Q_D,
   output Q_E,
   output Q_F,
-  output RST
+  output RST,
+  output [3:0] OPCODE_OUT
 );
   wire RST_temp;
   wire s0;
@@ -320,7 +347,16 @@ module ALU_RegCtrl (
     .C( CLK ),
     .Q( s15 )
   );
-  assign RST_temp = ~ \IsEn?_MUX ;
+  assign RST_temp = ~ \IsEn?_Decoder ;
+  DIG_D_FF_Nbit #(
+    .Bits(4),
+    .Default(0)
+  )
+  DIG_D_FF_Nbit_i16 (
+    .D( OPCODE_IN ),
+    .C( CLK ),
+    .Q( OPCODE_OUT )
+  );
   assign Q_0 = (RST_temp | s0);
   assign Q_1 = (RST_temp | s1);
   assign Q_2 = (RST_temp | s2);
@@ -406,7 +442,7 @@ module DIG_Register
 endmodule
 
 module \16_BitRegister  (
-  input [15:0] D,
+  input D,
   input EN,
   input CLK,
   output Q0,
@@ -1007,6 +1043,83 @@ module DemuxBus2
 endmodule
 
 
+module Mux_16x1_NBits #(
+    parameter Bits = 2
+)
+(
+    input [3:0] sel,
+    input [(Bits - 1):0] in_0,
+    input [(Bits - 1):0] in_1,
+    input [(Bits - 1):0] in_2,
+    input [(Bits - 1):0] in_3,
+    input [(Bits - 1):0] in_4,
+    input [(Bits - 1):0] in_5,
+    input [(Bits - 1):0] in_6,
+    input [(Bits - 1):0] in_7,
+    input [(Bits - 1):0] in_8,
+    input [(Bits - 1):0] in_9,
+    input [(Bits - 1):0] in_10,
+    input [(Bits - 1):0] in_11,
+    input [(Bits - 1):0] in_12,
+    input [(Bits - 1):0] in_13,
+    input [(Bits - 1):0] in_14,
+    input [(Bits - 1):0] in_15,
+    output reg [(Bits - 1):0] out
+);
+    always @ (*) begin
+        case (sel)
+            4'h0: out = in_0;
+            4'h1: out = in_1;
+            4'h2: out = in_2;
+            4'h3: out = in_3;
+            4'h4: out = in_4;
+            4'h5: out = in_5;
+            4'h6: out = in_6;
+            4'h7: out = in_7;
+            4'h8: out = in_8;
+            4'h9: out = in_9;
+            4'ha: out = in_10;
+            4'hb: out = in_11;
+            4'hc: out = in_12;
+            4'hd: out = in_13;
+            4'he: out = in_14;
+            4'hf: out = in_15;
+            default:
+                out = 'h0;
+        endcase
+    end
+endmodule
+
+
+module DIG_Counter_Nbit
+#(
+    parameter Bits = 2
+)
+(
+    output [(Bits-1):0] out,
+    output ovf,
+    input C,
+    input en,
+    input clr
+);
+    reg [(Bits-1):0] count;
+
+    always @ (posedge C) begin
+        if (clr)
+          count <= 'h0;
+        else if (en)
+          count <= count + 1'b1;
+    end
+
+    assign out = count;
+    assign ovf = en? &count : 1'b0;
+
+    initial begin
+        count = 'h0;
+    end
+endmodule
+
+
 module ALU (
   input En,
   input [3:0] Opcode,
@@ -1015,28 +1128,19 @@ module ALU (
   input CLK,
   input Carry_In,
   input Borrow_In,
-  output [15:0] Sum,
-  output Carry_Out,
-  output Borrow_Out,
-  output [15:0] Sub,
-  output [15:0] mul_low,
-  output [15:0] mul_high,
-  output [15:0] \AND ,
-  output [15:0] \XOR ,
-  output [15:0] \OR ,
-  output [15:0] \Not ,
-  output [15:0] SAR,
-  output [15:0] SHR,
-  output [15:0] SHL,
-  output SLT,
+  input [3:0] TARGET_ADDR,
+  output SCU_EN,
   output LSU_EN,
-  output SLTU,
-  output [15:0] ROR,
-  output SERACC_EN
+  output [15:0] OUT,
+  output [3:0] TARGET,
+  output WE // Enable Write
+
 );
-  wire s0;
-  wire s1;
-  wire s2;
+  wire [15:0] s0;
+  wire [15:0] s1;
+  wire [15:0] SUM;
+  wire CARRY;
+  wire [15:0] s2;
   wire s3;
   wire s4;
   wire s5;
@@ -1048,15 +1152,13 @@ module ALU (
   wire s11;
   wire s12;
   wire s13;
-  wire SERACC_EN_temp;
-  wire LSU_EN_temp;
-  wire [15:0] s14;
-  wire [15:0] s15;
-  wire [15:0] s16;
+  wire s14;
+  wire s15;
+  wire s16;
   wire s17;
   wire s18;
   wire s19;
-  wire s20;
+  wire [15:0] s20;
   wire s21;
   wire s22;
   wire s23;
@@ -1071,7 +1173,7 @@ module ALU (
   wire s32;
   wire s33;
   wire s34;
-  wire [15:0] s35;
+  wire s35;
   wire s36;
   wire s37;
   wire s38;
@@ -1088,6 +1190,8 @@ module ALU (
   wire s49;
   wire s50;
   wire s51;
+  wire SCU_EN_temp;
+  wire LSU_EN_temp;
   wire s52;
   wire s53;
   wire s54;
@@ -1102,7 +1206,7 @@ module ALU (
   wire s63;
   wire s64;
   wire s65;
-  wire s66;
+  wire [3:0] s66;
   wire s67;
   wire s68;
   wire s69;
@@ -1119,9 +1223,9 @@ module ALU (
   wire s80;
   wire s81;
   wire s82;
-  wire s83;
+  wire [15:0] s83;
   wire s84;
-  wire [15:0] s85;
+  wire s85;
   wire s86;
   wire s87;
   wire s88;
@@ -1136,10 +1240,12 @@ module ALU (
   wire s97;
   wire s98;
   wire s99;
-  wire s100;
+  wire [15:0] s100;
+  wire [15:0] SUB;
+  wire BORROW;
   wire s101;
   wire s102;
-  wire [15:0] s103;
+  wire s103;
   wire s104;
   wire s105;
   wire s106;
@@ -1153,11 +1259,11 @@ module ALU (
   wire s114;
   wire s115;
   wire s116;
-  wire s117;
+  wire [15:0] s117;
   wire s118;
   wire s119;
   wire s120;
-  wire [15:0] s121;
+  wire s121;
   wire s122;
   wire s123;
   wire s124;
@@ -1170,13 +1276,14 @@ module ALU (
   wire s131;
   wire s132;
   wire s133;
-  wire s134;
-  wire s135;
+  wire [15:0] s134;
+  wire [31:0] s135;
+  wire [15:0] MUL_LOW;
   wire s136;
   wire s137;
   wire s138;
-  wire [15:0] s139;
-  wire [31:0] s140;
+  wire s139;
+  wire s140;
   wire s141;
   wire s142;
   wire s143;
@@ -1188,13 +1295,13 @@ module ALU (
   wire s149;
   wire s150;
   wire s151;
-  wire s152;
+  wire [15:0] s152;
   wire s153;
   wire s154;
   wire s155;
   wire s156;
   wire s157;
-  wire [15:0] s158;
+  wire s158;
   wire s159;
   wire s160;
   wire s161;
@@ -1205,17 +1312,19 @@ module ALU (
   wire s166;
   wire s167;
   wire s168;
-  wire s169;
-  wire s170;
-  wire s171;
-  wire s172;
+  wire [15:0] s169;
+  wire [31:0] s170;
+  wire [15:0] MUL_HIGH;
+  wire [15:0] s171;
+  wire [15:0] s172;
+  wire [15:0] \AND ;
   wire s173;
   wire s174;
   wire s175;
-  wire [15:0] s176;
-  wire [31:0] s177;
-  wire [15:0] s178;
-  wire [15:0] s179;
+  wire s176;
+  wire s177;
+  wire s178;
+  wire s179;
   wire s180;
   wire s181;
   wire s182;
@@ -1257,7 +1366,7 @@ module ALU (
   wire s218;
   wire s219;
   wire s220;
-  wire s221;
+  wire [15:0] s221;
   wire s222;
   wire s223;
   wire s224;
@@ -1267,14 +1376,15 @@ module ALU (
   wire s228;
   wire s229;
   wire s230;
-  wire [15:0] s231;
+  wire s231;
   wire s232;
   wire s233;
   wire s234;
   wire s235;
   wire s236;
   wire s237;
-  wire s238;
+  wire [15:0] s238;
+  wire [15:0] \XOR ;
   wire s239;
   wire s240;
   wire s241;
@@ -1285,13 +1395,13 @@ module ALU (
   wire s246;
   wire s247;
   wire s248;
-  wire [15:0] s249;
+  wire s249;
   wire s250;
   wire s251;
   wire s252;
   wire s253;
   wire s254;
-  wire s255;
+  wire [15:0] s255;
   wire s256;
   wire s257;
   wire s258;
@@ -1303,12 +1413,13 @@ module ALU (
   wire s264;
   wire s265;
   wire s266;
-  wire [15:0] s267;
+  wire s267;
   wire s268;
   wire s269;
   wire s270;
   wire s271;
-  wire s272;
+  wire [15:0] s272;
+  wire [15:0] \OR ;
   wire s273;
   wire s274;
   wire s275;
@@ -1321,11 +1432,12 @@ module ALU (
   wire s282;
   wire s283;
   wire s284;
-  wire [15:0] s285;
+  wire s285;
   wire s286;
   wire s287;
   wire s288;
-  wire s289;
+  wire [15:0] s289;
+  wire [15:0] \NOT ;
   wire s290;
   wire s291;
   wire s292;
@@ -1339,10 +1451,10 @@ module ALU (
   wire s300;
   wire s301;
   wire s302;
-  wire [15:0] s303;
+  wire s303;
   wire s304;
   wire s305;
-  wire s306;
+  wire [15:0] s306;
   wire s307;
   wire s308;
   wire s309;
@@ -1357,11 +1469,11 @@ module ALU (
   wire s318;
   wire s319;
   wire s320;
-  wire [15:0] s321;
+  wire s321;
   wire s322;
-  wire s323;
-  wire s324;
-  wire s325;
+  wire [15:0] s323;
+  wire [3:0] s324;
+  wire [3:0] s325;
   wire s326;
   wire s327;
   wire s328;
@@ -1375,13 +1487,13 @@ module ALU (
   wire s336;
   wire s337;
   wire s338;
-  wire [15:0] s339;
+  wire s339;
   wire s340;
-  wire [3:0] s341;
-  wire s342;
+  wire s341;
+  wire [15:0] s342;
   wire [3:0] s343;
-  wire s344;
-  wire s345;
+  wire [15:0] s344;
+  wire [15:0] s345;
   wire s346;
   wire s347;
   wire s348;
@@ -1397,11 +1509,11 @@ module ALU (
   wire s358;
   wire s359;
   wire s360;
-  wire [15:0] s361;
+  wire s361;
   wire s362;
-  wire [3:0] s363;
-  wire [15:0] s364;
-  wire [15:0] s365;
+  wire s363;
+  wire s364;
+  wire s365;
   wire s366;
   wire s367;
   wire s368;
@@ -1415,8 +1527,8 @@ module ALU (
   wire s376;
   wire s377;
   wire s378;
-  wire s379;
-  wire s380;
+  wire [15:0] s379;
+  wire [15:0] s380;
   wire s381;
   wire s382;
   wire s383;
@@ -1436,8 +1548,8 @@ module ALU (
   wire s397;
   wire s398;
   wire s399;
-  wire [15:0] s400;
-  wire [15:0] s401;
+  wire s400;
+  wire s401;
   wire s402;
   wire s403;
   wire s404;
@@ -1466,1177 +1578,1187 @@ module ALU (
   wire s427;
   wire s428;
   wire s429;
-  wire s430;
-  wire s431;
-  wire s432;
-  wire s433;
-  wire s434;
-  wire s435;
-  wire s436;
-  wire s437;
+  wire [15:0] s430;
+  wire [3:0] s431;
+  wire [3:0] s432;
+  wire [3:0] s433;
+  wire [3:0] s434;
+  wire [3:0] s435;
+  wire [15:0] s436;
+  wire [3:0] s437;
   wire s438;
   wire s439;
   wire s440;
-  wire s441;
-  wire s442;
+  wire [15:0] s441;
+  wire [1:0] s442;
+  wire [15:0] SAR;
+  wire [15:0] SHR;
+  wire [15:0] SHL;
+  wire [15:0] ROR;
+  wire [15:0] SLT;
+  wire [15:0] SLTU;
   wire s443;
   wire s444;
-  wire s445;
+  wire [1:0] s445;
   wire s446;
-  wire s447;
-  wire s448;
-  wire s449;
-  wire s450;
-  wire s451;
-  wire s452;
-  wire [15:0] s453;
-  wire s454;
-  wire [3:0] s455;
-  wire [3:0] s456;
-  wire [3:0] s457;
-  wire [3:0] s458;
-  wire [3:0] s459;
-  wire [15:0] s460;
-  wire [3:0] s461;
-  wire s462;
-  wire s463;
-  wire s464;
-  wire [15:0] s465;
-  wire [1:0] s466;
-  \16_BitMuxWithEnablePin  \16_BitMuxWithEnablePin_i0 (
+  \16_BitDecoderWithEnablePin  \16_BitDecoderWithEnablePin_i0 (
     .EN( En ),
     .Sel_4Bit( Opcode ),
-    .Q0( s0 ),
-    .Q1( s1 ),
-    .Q2( s2 ),
-    .Q3( s3 ),
-    .Q4( s4 ),
-    .Q5( s5 ),
-    .Q6( s6 ),
-    .Q7( s7 ),
-    .Q8( s8 ),
-    .Q9( s9 ),
-    .Q10( s10 ),
-    .Q11( s11 ),
-    .Q12( s12 ),
-    .Q13( s13 ),
-    .Q14( SERACC_EN_temp ),
+    .Q0( s38 ),
+    .Q1( s39 ),
+    .Q2( s40 ),
+    .Q3( s41 ),
+    .Q4( s42 ),
+    .Q5( s43 ),
+    .Q6( s44 ),
+    .Q7( s45 ),
+    .Q8( s46 ),
+    .Q9( s47 ),
+    .Q10( s48 ),
+    .Q11( s49 ),
+    .Q12( s50 ),
+    .Q13( s51 ),
+    .Q14( SCU_EN_temp ),
     .Q15( LSU_EN_temp )
   );
-  assign s18 = CLK;
-  assign s36 = CLK;
-  assign s68 = CLK;
-  assign s86 = CLK;
-  assign s104 = CLK;
-  assign s122 = CLK;
-  assign s141 = CLK;
-  assign s159 = CLK;
-  assign s180 = CLK;
-  assign s197 = CLK;
-  assign s214 = CLK;
-  assign s232 = CLK;
-  assign s250 = CLK;
-  assign s268 = CLK;
-  assign s286 = CLK;
-  assign s304 = CLK;
-  assign s322 = CLK;
-  assign s340 = CLK;
-  assign s342 = CLK;
-  assign s344 = CLK;
-  assign s362 = CLK;
-  assign s366 = CLK;
-  assign s383 = CLK;
-  assign s402 = CLK;
-  assign s419 = CLK;
-  assign s436 = CLK;
-  assign s454 = CLK;
-  assign s53 = (~ (LSU_EN_temp | SERACC_EN_temp) & En);
-  ALU_RegCtrl ALU_RegCtrl_i1 (
-    .\IsEn?_MUX ( s53 ),
-    .CLK( CLK ),
-    .\0x0 ( s0 ),
-    .\0x1 ( s1 ),
-    .\0x2 ( s2 ),
-    .\0x3 ( s3 ),
-    .\0x4 ( s4 ),
-    .\0x5 ( s5 ),
-    .\0x6 ( s6 ),
-    .\0x7 ( s7 ),
-    .\0x8 ( s8 ),
-    .\0x9 ( s9 ),
-    .\0xA ( s10 ),
-    .\0xB ( s11 ),
-    .\0xC ( s12 ),
-    .\0xD ( s13 ),
-    .\0xE ( SERACC_EN_temp ),
-    .\0xF ( LSU_EN_temp ),
-    .Q_0( s17 ),
-    .Q_1( s54 ),
-    .Q_2( s55 ),
-    .Q_3( s56 ),
-    .Q_4( s57 ),
-    .Q_5( s58 ),
-    .Q_6( s59 ),
-    .Q_7( s60 ),
-    .Q_8( s61 ),
-    .Q_9( s62 ),
-    .Q_A( s63 ),
-    .Q_B( s64 ),
-    .Q_C( s65 ),
-    .Q_D( s66 ),
-    .RST( s67 )
+  DIG_D_FF_Nbit #(
+    .Bits(4),
+    .Default(0)
+  )
+  DIG_D_FF_Nbit_i1 (
+    .D( TARGET_ADDR ),
+    .C( CLK ),
+    .Q( TARGET )
   );
-  ALU_RegRST ALU_RegRST_i2 (
-    .D( A ),
-    .RST( s67 ),
-    .Q( s16 )
+  assign s37 = (~ (LSU_EN_temp | SCU_EN_temp) & En);
+  ALU_RegCtrl ALU_RegCtrl_i2 (
+    .\IsEn?_Decoder ( s37 ),
+    .CLK( CLK ),
+    .\0x0 ( s38 ),
+    .\0x1 ( s39 ),
+    .\0x2 ( s40 ),
+    .\0x3 ( s41 ),
+    .\0x4 ( s42 ),
+    .\0x5 ( s43 ),
+    .\0x6 ( s44 ),
+    .\0x7 ( s45 ),
+    .\0x8 ( s46 ),
+    .\0x9 ( s47 ),
+    .\0xA ( s48 ),
+    .\0xB ( s49 ),
+    .\0xC ( s50 ),
+    .\0xD ( s51 ),
+    .\0xE ( SCU_EN_temp ),
+    .\0xF ( LSU_EN_temp ),
+    .OPCODE_IN( Opcode ),
+    .Q_0( s3 ),
+    .Q_1( s52 ),
+    .Q_2( s53 ),
+    .Q_3( s54 ),
+    .Q_4( s55 ),
+    .Q_5( s56 ),
+    .Q_6( s57 ),
+    .Q_7( s58 ),
+    .Q_8( s59 ),
+    .Q_9( s60 ),
+    .Q_A( s61 ),
+    .Q_B( s62 ),
+    .Q_C( s63 ),
+    .Q_D( s64 ),
+    .RST( s65 ),
+    .OPCODE_OUT( s66 )
   );
   ALU_RegRST ALU_RegRST_i3 (
+    .D( A ),
+    .RST( s65 ),
+    .Q( s2 )
+  );
+  ALU_RegRST ALU_RegRST_i4 (
     .D( B ),
-    .RST( s67 ),
-    .Q( s35 )
+    .RST( s65 ),
+    .Q( s20 )
   );
-  PriorityEncoder2 PriorityEncoder2_i4 (
-    .in0( s61 ),
-    .in1( s62 ),
-    .in2( s63 ),
-    .in3( s66 ),
-    .num( s466 )
+  PriorityEncoder2 PriorityEncoder2_i5 (
+    .in0( s59 ),
+    .in1( s60 ),
+    .in2( s61 ),
+    .in3( s64 ),
+    .num( s442 )
   );
-  \16_BitRegister  \16_BitRegister_i5 (
-    .D( s16 ),
-    .EN( s17 ),
-    .CLK( s18 ),
-    .Q0( s19 ),
-    .Q1( s20 ),
-    .Q2( s21 ),
-    .Q3( s22 ),
-    .Q4( s23 ),
-    .Q5( s24 ),
-    .Q6( s25 ),
-    .Q7( s26 ),
-    .Q8( s27 ),
-    .Q9( s28 ),
-    .Q10( s29 ),
-    .Q11( s30 ),
-    .Q12( s31 ),
-    .Q13( s32 ),
-    .Q14( s33 ),
-    .Q15( s34 )
-  );
+  assign s443 = ~ s65;
   \16_BitRegister  \16_BitRegister_i6 (
-    .D( s35 ),
-    .EN( s17 ),
-    .CLK( s36 ),
-    .Q0( s37 ),
-    .Q1( s38 ),
-    .Q2( s39 ),
-    .Q3( s40 ),
-    .Q4( s41 ),
-    .Q5( s42 ),
-    .Q6( s43 ),
-    .Q7( s44 ),
-    .Q8( s45 ),
-    .Q9( s46 ),
-    .Q10( s47 ),
-    .Q11( s48 ),
-    .Q12( s49 ),
-    .Q13( s50 ),
-    .Q14( s51 ),
-    .Q15( s52 )
+    .D( s2 ),
+    .EN( s3 ),
+    .CLK( CLK ),
+    .Q0( s4 ),
+    .Q1( s5 ),
+    .Q2( s6 ),
+    .Q3( s7 ),
+    .Q4( s8 ),
+    .Q5( s9 ),
+    .Q6( s10 ),
+    .Q7( s11 ),
+    .Q8( s12 ),
+    .Q9( s13 ),
+    .Q10( s14 ),
+    .Q11( s15 ),
+    .Q12( s16 ),
+    .Q13( s17 ),
+    .Q14( s18 ),
+    .Q15( s19 )
   );
   \16_BitRegister  \16_BitRegister_i7 (
-    .D( s16 ),
-    .EN( s54 ),
-    .CLK( s68 ),
-    .Q0( s69 ),
-    .Q1( s70 ),
-    .Q2( s71 ),
-    .Q3( s72 ),
-    .Q4( s73 ),
-    .Q5( s74 ),
-    .Q6( s75 ),
-    .Q7( s76 ),
-    .Q8( s77 ),
-    .Q9( s78 ),
-    .Q10( s79 ),
-    .Q11( s80 ),
-    .Q12( s81 ),
-    .Q13( s82 ),
-    .Q14( s83 ),
-    .Q15( s84 )
+    .D( s20 ),
+    .EN( s3 ),
+    .CLK( CLK ),
+    .Q0( s21 ),
+    .Q1( s22 ),
+    .Q2( s23 ),
+    .Q3( s24 ),
+    .Q4( s25 ),
+    .Q5( s26 ),
+    .Q6( s27 ),
+    .Q7( s28 ),
+    .Q8( s29 ),
+    .Q9( s30 ),
+    .Q10( s31 ),
+    .Q11( s32 ),
+    .Q12( s33 ),
+    .Q13( s34 ),
+    .Q14( s35 ),
+    .Q15( s36 )
   );
   \16_BitRegister  \16_BitRegister_i8 (
-    .D( s35 ),
-    .EN( s54 ),
-    .CLK( s86 ),
-    .Q0( s87 ),
-    .Q1( s88 ),
-    .Q2( s89 ),
-    .Q3( s90 ),
-    .Q4( s91 ),
-    .Q5( s92 ),
-    .Q6( s93 ),
-    .Q7( s94 ),
-    .Q8( s95 ),
-    .Q9( s96 ),
-    .Q10( s97 ),
-    .Q11( s98 ),
-    .Q12( s99 ),
-    .Q13( s100 ),
-    .Q14( s101 ),
-    .Q15( s102 )
+    .D( s2 ),
+    .EN( s52 ),
+    .CLK( CLK ),
+    .Q0( s67 ),
+    .Q1( s68 ),
+    .Q2( s69 ),
+    .Q3( s70 ),
+    .Q4( s71 ),
+    .Q5( s72 ),
+    .Q6( s73 ),
+    .Q7( s74 ),
+    .Q8( s75 ),
+    .Q9( s76 ),
+    .Q10( s77 ),
+    .Q11( s78 ),
+    .Q12( s79 ),
+    .Q13( s80 ),
+    .Q14( s81 ),
+    .Q15( s82 )
   );
   \16_BitRegister  \16_BitRegister_i9 (
-    .D( s16 ),
-    .EN( s55 ),
-    .CLK( s104 ),
-    .Q0( s105 ),
-    .Q1( s106 ),
-    .Q2( s107 ),
-    .Q3( s108 ),
-    .Q4( s109 ),
-    .Q5( s110 ),
-    .Q6( s111 ),
-    .Q7( s112 ),
-    .Q8( s113 ),
-    .Q9( s114 ),
-    .Q10( s115 ),
-    .Q11( s116 ),
-    .Q12( s117 ),
-    .Q13( s118 ),
-    .Q14( s119 ),
-    .Q15( s120 )
+    .D( s20 ),
+    .EN( s52 ),
+    .CLK( CLK ),
+    .Q0( s84 ),
+    .Q1( s85 ),
+    .Q2( s86 ),
+    .Q3( s87 ),
+    .Q4( s88 ),
+    .Q5( s89 ),
+    .Q6( s90 ),
+    .Q7( s91 ),
+    .Q8( s92 ),
+    .Q9( s93 ),
+    .Q10( s94 ),
+    .Q11( s95 ),
+    .Q12( s96 ),
+    .Q13( s97 ),
+    .Q14( s98 ),
+    .Q15( s99 )
   );
   \16_BitRegister  \16_BitRegister_i10 (
-    .D( s35 ),
-    .EN( s55 ),
-    .CLK( s122 ),
-    .Q0( s123 ),
-    .Q1( s124 ),
-    .Q2( s125 ),
-    .Q3( s126 ),
-    .Q4( s127 ),
-    .Q5( s128 ),
-    .Q6( s129 ),
-    .Q7( s130 ),
-    .Q8( s131 ),
-    .Q9( s132 ),
-    .Q10( s133 ),
-    .Q11( s134 ),
-    .Q12( s135 ),
-    .Q13( s136 ),
-    .Q14( s137 ),
-    .Q15( s138 )
+    .D( s2 ),
+    .EN( s53 ),
+    .CLK( CLK ),
+    .Q0( s101 ),
+    .Q1( s102 ),
+    .Q2( s103 ),
+    .Q3( s104 ),
+    .Q4( s105 ),
+    .Q5( s106 ),
+    .Q6( s107 ),
+    .Q7( s108 ),
+    .Q8( s109 ),
+    .Q9( s110 ),
+    .Q10( s111 ),
+    .Q11( s112 ),
+    .Q12( s113 ),
+    .Q13( s114 ),
+    .Q14( s115 ),
+    .Q15( s116 )
   );
   \16_BitRegister  \16_BitRegister_i11 (
-    .D( s16 ),
-    .EN( s56 ),
-    .CLK( s141 ),
-    .Q0( s142 ),
-    .Q1( s143 ),
-    .Q2( s144 ),
-    .Q3( s145 ),
-    .Q4( s146 ),
-    .Q5( s147 ),
-    .Q6( s148 ),
-    .Q7( s149 ),
-    .Q8( s150 ),
-    .Q9( s151 ),
-    .Q10( s152 ),
-    .Q11( s153 ),
-    .Q12( s154 ),
-    .Q13( s155 ),
-    .Q14( s156 ),
-    .Q15( s157 )
+    .D( s20 ),
+    .EN( s53 ),
+    .CLK( CLK ),
+    .Q0( s118 ),
+    .Q1( s119 ),
+    .Q2( s120 ),
+    .Q3( s121 ),
+    .Q4( s122 ),
+    .Q5( s123 ),
+    .Q6( s124 ),
+    .Q7( s125 ),
+    .Q8( s126 ),
+    .Q9( s127 ),
+    .Q10( s128 ),
+    .Q11( s129 ),
+    .Q12( s130 ),
+    .Q13( s131 ),
+    .Q14( s132 ),
+    .Q15( s133 )
   );
   \16_BitRegister  \16_BitRegister_i12 (
-    .D( s35 ),
-    .EN( s56 ),
-    .CLK( s159 ),
-    .Q0( s160 ),
-    .Q1( s161 ),
-    .Q2( s162 ),
-    .Q3( s163 ),
-    .Q4( s164 ),
-    .Q5( s165 ),
-    .Q6( s166 ),
-    .Q7( s167 ),
-    .Q8( s168 ),
-    .Q9( s169 ),
-    .Q10( s170 ),
-    .Q11( s171 ),
-    .Q12( s172 ),
-    .Q13( s173 ),
-    .Q14( s174 ),
-    .Q15( s175 )
+    .D( s2 ),
+    .EN( s54 ),
+    .CLK( CLK ),
+    .Q0( s136 ),
+    .Q1( s137 ),
+    .Q2( s138 ),
+    .Q3( s139 ),
+    .Q4( s140 ),
+    .Q5( s141 ),
+    .Q6( s142 ),
+    .Q7( s143 ),
+    .Q8( s144 ),
+    .Q9( s145 ),
+    .Q10( s146 ),
+    .Q11( s147 ),
+    .Q12( s148 ),
+    .Q13( s149 ),
+    .Q14( s150 ),
+    .Q15( s151 )
   );
   \16_BitRegister  \16_BitRegister_i13 (
-    .D( s16 ),
-    .EN( s57 ),
-    .CLK( s180 ),
-    .Q0( s181 ),
-    .Q1( s182 ),
-    .Q2( s183 ),
-    .Q3( s184 ),
-    .Q4( s185 ),
-    .Q5( s186 ),
-    .Q6( s187 ),
-    .Q7( s188 ),
-    .Q8( s189 ),
-    .Q9( s190 ),
-    .Q10( s191 ),
-    .Q11( s192 ),
-    .Q12( s193 ),
-    .Q13( s194 ),
-    .Q14( s195 ),
-    .Q15( s196 )
+    .D( s20 ),
+    .EN( s54 ),
+    .CLK( CLK ),
+    .Q0( s153 ),
+    .Q1( s154 ),
+    .Q2( s155 ),
+    .Q3( s156 ),
+    .Q4( s157 ),
+    .Q5( s158 ),
+    .Q6( s159 ),
+    .Q7( s160 ),
+    .Q8( s161 ),
+    .Q9( s162 ),
+    .Q10( s163 ),
+    .Q11( s164 ),
+    .Q12( s165 ),
+    .Q13( s166 ),
+    .Q14( s167 ),
+    .Q15( s168 )
   );
   \16_BitRegister  \16_BitRegister_i14 (
-    .D( s35 ),
-    .EN( s57 ),
-    .CLK( s197 ),
-    .Q0( s198 ),
-    .Q1( s199 ),
-    .Q2( s200 ),
-    .Q3( s201 ),
-    .Q4( s202 ),
-    .Q5( s203 ),
-    .Q6( s204 ),
-    .Q7( s205 ),
-    .Q8( s206 ),
-    .Q9( s207 ),
-    .Q10( s208 ),
-    .Q11( s209 ),
-    .Q12( s210 ),
-    .Q13( s211 ),
-    .Q14( s212 ),
-    .Q15( s213 )
+    .D( s2 ),
+    .EN( s55 ),
+    .CLK( CLK ),
+    .Q0( s173 ),
+    .Q1( s174 ),
+    .Q2( s175 ),
+    .Q3( s176 ),
+    .Q4( s177 ),
+    .Q5( s178 ),
+    .Q6( s179 ),
+    .Q7( s180 ),
+    .Q8( s181 ),
+    .Q9( s182 ),
+    .Q10( s183 ),
+    .Q11( s184 ),
+    .Q12( s185 ),
+    .Q13( s186 ),
+    .Q14( s187 ),
+    .Q15( s188 )
   );
   \16_BitRegister  \16_BitRegister_i15 (
-    .D( s16 ),
-    .EN( s58 ),
-    .CLK( s214 ),
-    .Q0( s215 ),
-    .Q1( s216 ),
-    .Q2( s217 ),
-    .Q3( s218 ),
-    .Q4( s219 ),
-    .Q5( s220 ),
-    .Q6( s221 ),
-    .Q7( s222 ),
-    .Q8( s223 ),
-    .Q9( s224 ),
-    .Q10( s225 ),
-    .Q11( s226 ),
-    .Q12( s227 ),
-    .Q13( s228 ),
-    .Q14( s229 ),
-    .Q15( s230 )
+    .D( s20 ),
+    .EN( s55 ),
+    .CLK( CLK ),
+    .Q0( s189 ),
+    .Q1( s190 ),
+    .Q2( s191 ),
+    .Q3( s192 ),
+    .Q4( s193 ),
+    .Q5( s194 ),
+    .Q6( s195 ),
+    .Q7( s196 ),
+    .Q8( s197 ),
+    .Q9( s198 ),
+    .Q10( s199 ),
+    .Q11( s200 ),
+    .Q12( s201 ),
+    .Q13( s202 ),
+    .Q14( s203 ),
+    .Q15( s204 )
   );
   \16_BitRegister  \16_BitRegister_i16 (
-    .D( s35 ),
-    .EN( s58 ),
-    .CLK( s232 ),
-    .Q0( s233 ),
-    .Q1( s234 ),
-    .Q2( s235 ),
-    .Q3( s236 ),
-    .Q4( s237 ),
-    .Q5( s238 ),
-    .Q6( s239 ),
-    .Q7( s240 ),
-    .Q8( s241 ),
-    .Q9( s242 ),
-    .Q10( s243 ),
-    .Q11( s244 ),
-    .Q12( s245 ),
-    .Q13( s246 ),
-    .Q14( s247 ),
-    .Q15( s248 )
+    .D( s2 ),
+    .EN( s56 ),
+    .CLK( CLK ),
+    .Q0( s205 ),
+    .Q1( s206 ),
+    .Q2( s207 ),
+    .Q3( s208 ),
+    .Q4( s209 ),
+    .Q5( s210 ),
+    .Q6( s211 ),
+    .Q7( s212 ),
+    .Q8( s213 ),
+    .Q9( s214 ),
+    .Q10( s215 ),
+    .Q11( s216 ),
+    .Q12( s217 ),
+    .Q13( s218 ),
+    .Q14( s219 ),
+    .Q15( s220 )
   );
   \16_BitRegister  \16_BitRegister_i17 (
-    .D( s16 ),
-    .EN( s59 ),
-    .CLK( s250 ),
-    .Q0( s251 ),
-    .Q1( s252 ),
-    .Q2( s253 ),
-    .Q3( s254 ),
-    .Q4( s255 ),
-    .Q5( s256 ),
-    .Q6( s257 ),
-    .Q7( s258 ),
-    .Q8( s259 ),
-    .Q9( s260 ),
-    .Q10( s261 ),
-    .Q11( s262 ),
-    .Q12( s263 ),
-    .Q13( s264 ),
-    .Q14( s265 ),
-    .Q15( s266 )
+    .D( s20 ),
+    .EN( s56 ),
+    .CLK( CLK ),
+    .Q0( s222 ),
+    .Q1( s223 ),
+    .Q2( s224 ),
+    .Q3( s225 ),
+    .Q4( s226 ),
+    .Q5( s227 ),
+    .Q6( s228 ),
+    .Q7( s229 ),
+    .Q8( s230 ),
+    .Q9( s231 ),
+    .Q10( s232 ),
+    .Q11( s233 ),
+    .Q12( s234 ),
+    .Q13( s235 ),
+    .Q14( s236 ),
+    .Q15( s237 )
   );
   \16_BitRegister  \16_BitRegister_i18 (
-    .D( s35 ),
-    .EN( s59 ),
-    .CLK( s268 ),
-    .Q0( s269 ),
-    .Q1( s270 ),
-    .Q2( s271 ),
-    .Q3( s272 ),
-    .Q4( s273 ),
-    .Q5( s274 ),
-    .Q6( s275 ),
-    .Q7( s276 ),
-    .Q8( s277 ),
-    .Q9( s278 ),
-    .Q10( s279 ),
-    .Q11( s280 ),
-    .Q12( s281 ),
-    .Q13( s282 ),
-    .Q14( s283 ),
-    .Q15( s284 )
+    .D( s2 ),
+    .EN( s57 ),
+    .CLK( CLK ),
+    .Q0( s239 ),
+    .Q1( s240 ),
+    .Q2( s241 ),
+    .Q3( s242 ),
+    .Q4( s243 ),
+    .Q5( s244 ),
+    .Q6( s245 ),
+    .Q7( s246 ),
+    .Q8( s247 ),
+    .Q9( s248 ),
+    .Q10( s249 ),
+    .Q11( s250 ),
+    .Q12( s251 ),
+    .Q13( s252 ),
+    .Q14( s253 ),
+    .Q15( s254 )
   );
   \16_BitRegister  \16_BitRegister_i19 (
-    .D( s16 ),
-    .EN( s60 ),
-    .CLK( s286 ),
-    .Q0( s287 ),
-    .Q1( s288 ),
-    .Q2( s289 ),
-    .Q3( s290 ),
-    .Q4( s291 ),
-    .Q5( s292 ),
-    .Q6( s293 ),
-    .Q7( s294 ),
-    .Q8( s295 ),
-    .Q9( s296 ),
-    .Q10( s297 ),
-    .Q11( s298 ),
-    .Q12( s299 ),
-    .Q13( s300 ),
-    .Q14( s301 ),
-    .Q15( s302 )
+    .D( s20 ),
+    .EN( s57 ),
+    .CLK( CLK ),
+    .Q0( s256 ),
+    .Q1( s257 ),
+    .Q2( s258 ),
+    .Q3( s259 ),
+    .Q4( s260 ),
+    .Q5( s261 ),
+    .Q6( s262 ),
+    .Q7( s263 ),
+    .Q8( s264 ),
+    .Q9( s265 ),
+    .Q10( s266 ),
+    .Q11( s267 ),
+    .Q12( s268 ),
+    .Q13( s269 ),
+    .Q14( s270 ),
+    .Q15( s271 )
   );
   \16_BitRegister  \16_BitRegister_i20 (
-    .D( s16 ),
-    .EN( s61 ),
-    .CLK( s304 ),
-    .Q0( s305 ),
-    .Q1( s306 ),
-    .Q2( s307 ),
-    .Q3( s308 ),
-    .Q4( s309 ),
-    .Q5( s310 ),
-    .Q6( s311 ),
-    .Q7( s312 ),
-    .Q8( s313 ),
-    .Q9( s314 ),
-    .Q10( s315 ),
-    .Q11( s316 ),
-    .Q12( s317 ),
-    .Q13( s318 ),
-    .Q14( s319 ),
-    .Q15( s320 )
+    .D( s2 ),
+    .EN( s58 ),
+    .CLK( CLK ),
+    .Q0( s273 ),
+    .Q1( s274 ),
+    .Q2( s275 ),
+    .Q3( s276 ),
+    .Q4( s277 ),
+    .Q5( s278 ),
+    .Q6( s279 ),
+    .Q7( s280 ),
+    .Q8( s281 ),
+    .Q9( s282 ),
+    .Q10( s283 ),
+    .Q11( s284 ),
+    .Q12( s285 ),
+    .Q13( s286 ),
+    .Q14( s287 ),
+    .Q15( s288 )
   );
   \16_BitRegister  \16_BitRegister_i21 (
-    .D( s16 ),
-    .EN( s62 ),
-    .CLK( s322 ),
-    .Q0( s323 ),
-    .Q1( s324 ),
-    .Q2( s325 ),
-    .Q3( s326 ),
-    .Q4( s327 ),
-    .Q5( s328 ),
-    .Q6( s329 ),
-    .Q7( s330 ),
-    .Q8( s331 ),
-    .Q9( s332 ),
-    .Q10( s333 ),
-    .Q11( s334 ),
-    .Q12( s335 ),
-    .Q13( s336 ),
-    .Q14( s337 ),
-    .Q15( s338 )
+    .D( s2 ),
+    .EN( s59 ),
+    .CLK( CLK ),
+    .Q0( s290 ),
+    .Q1( s291 ),
+    .Q2( s292 ),
+    .Q3( s293 ),
+    .Q4( s294 ),
+    .Q5( s295 ),
+    .Q6( s296 ),
+    .Q7( s297 ),
+    .Q8( s298 ),
+    .Q9( s299 ),
+    .Q10( s300 ),
+    .Q11( s301 ),
+    .Q12( s302 ),
+    .Q13( s303 ),
+    .Q14( s304 ),
+    .Q15( s305 )
   );
   \16_BitRegister  \16_BitRegister_i22 (
-    .D( s16 ),
-    .EN( s63 ),
-    .CLK( s344 ),
-    .Q0( s345 ),
-    .Q1( s346 ),
-    .Q2( s347 ),
-    .Q3( s348 ),
-    .Q4( s349 ),
-    .Q5( s350 ),
-    .Q6( s351 ),
-    .Q7( s352 ),
-    .Q8( s353 ),
-    .Q9( s354 ),
-    .Q10( s355 ),
-    .Q11( s356 ),
-    .Q12( s357 ),
-    .Q13( s358 ),
-    .Q14( s359 ),
-    .Q15( s360 )
+    .D( s2 ),
+    .EN( s60 ),
+    .CLK( CLK ),
+    .Q0( s307 ),
+    .Q1( s308 ),
+    .Q2( s309 ),
+    .Q3( s310 ),
+    .Q4( s311 ),
+    .Q5( s312 ),
+    .Q6( s313 ),
+    .Q7( s314 ),
+    .Q8( s315 ),
+    .Q9( s316 ),
+    .Q10( s317 ),
+    .Q11( s318 ),
+    .Q12( s319 ),
+    .Q13( s320 ),
+    .Q14( s321 ),
+    .Q15( s322 )
   );
   \16_BitRegister  \16_BitRegister_i23 (
-    .D( s16 ),
-    .EN( s64 ),
-    .CLK( s366 ),
-    .Q0( s367 ),
-    .Q1( s368 ),
-    .Q2( s369 ),
-    .Q3( s370 ),
-    .Q4( s371 ),
-    .Q5( s372 ),
-    .Q6( s373 ),
-    .Q7( s374 ),
-    .Q8( s375 ),
-    .Q9( s376 ),
-    .Q10( s377 ),
-    .Q11( s378 ),
-    .Q12( s379 ),
-    .Q13( s380 ),
-    .Q14( s381 ),
-    .Q15( s382 )
+    .D( s2 ),
+    .EN( s61 ),
+    .CLK( CLK ),
+    .Q0( s326 ),
+    .Q1( s327 ),
+    .Q2( s328 ),
+    .Q3( s329 ),
+    .Q4( s330 ),
+    .Q5( s331 ),
+    .Q6( s332 ),
+    .Q7( s333 ),
+    .Q8( s334 ),
+    .Q9( s335 ),
+    .Q10( s336 ),
+    .Q11( s337 ),
+    .Q12( s338 ),
+    .Q13( s339 ),
+    .Q14( s340 ),
+    .Q15( s341 )
   );
   \16_BitRegister  \16_BitRegister_i24 (
-    .D( s35 ),
-    .EN( s64 ),
-    .CLK( s383 ),
-    .Q0( s384 ),
-    .Q1( s385 ),
-    .Q2( s386 ),
-    .Q3( s387 ),
-    .Q4( s388 ),
-    .Q5( s389 ),
-    .Q6( s390 ),
-    .Q7( s391 ),
-    .Q8( s392 ),
-    .Q9( s393 ),
-    .Q10( s394 ),
-    .Q11( s395 ),
-    .Q12( s396 ),
-    .Q13( s397 ),
-    .Q14( s398 ),
-    .Q15( s399 )
+    .D( s2 ),
+    .EN( s62 ),
+    .CLK( CLK ),
+    .Q0( s347 ),
+    .Q1( s348 ),
+    .Q2( s349 ),
+    .Q3( s350 ),
+    .Q4( s351 ),
+    .Q5( s352 ),
+    .Q6( s353 ),
+    .Q7( s354 ),
+    .Q8( s355 ),
+    .Q9( s356 ),
+    .Q10( s357 ),
+    .Q11( s358 ),
+    .Q12( s359 ),
+    .Q13( s360 ),
+    .Q14( s361 ),
+    .Q15( s362 )
   );
   \16_BitRegister  \16_BitRegister_i25 (
-    .D( s16 ),
-    .EN( s65 ),
-    .CLK( s402 ),
-    .Q0( s403 ),
-    .Q1( s404 ),
-    .Q2( s405 ),
-    .Q3( s406 ),
-    .Q4( s407 ),
-    .Q5( s408 ),
-    .Q6( s409 ),
-    .Q7( s410 ),
-    .Q8( s411 ),
-    .Q9( s412 ),
-    .Q10( s413 ),
-    .Q11( s414 ),
-    .Q12( s415 ),
-    .Q13( s416 ),
-    .Q14( s417 ),
-    .Q15( s418 )
+    .D( s20 ),
+    .EN( s62 ),
+    .CLK( CLK ),
+    .Q0( s363 ),
+    .Q1( s364 ),
+    .Q2( s365 ),
+    .Q3( s366 ),
+    .Q4( s367 ),
+    .Q5( s368 ),
+    .Q6( s369 ),
+    .Q7( s370 ),
+    .Q8( s371 ),
+    .Q9( s372 ),
+    .Q10( s373 ),
+    .Q11( s374 ),
+    .Q12( s375 ),
+    .Q13( s376 ),
+    .Q14( s377 ),
+    .Q15( s378 )
   );
   \16_BitRegister  \16_BitRegister_i26 (
-    .D( s35 ),
-    .EN( s65 ),
-    .CLK( s419 ),
-    .Q0( s420 ),
-    .Q1( s421 ),
-    .Q2( s422 ),
-    .Q3( s423 ),
-    .Q4( s424 ),
-    .Q5( s425 ),
-    .Q6( s426 ),
-    .Q7( s427 ),
-    .Q8( s428 ),
-    .Q9( s429 ),
-    .Q10( s430 ),
-    .Q11( s431 ),
-    .Q12( s432 ),
-    .Q13( s433 ),
-    .Q14( s434 ),
-    .Q15( s435 )
+    .D( s2 ),
+    .EN( s63 ),
+    .CLK( CLK ),
+    .Q0( s382 ),
+    .Q1( s383 ),
+    .Q2( s384 ),
+    .Q3( s385 ),
+    .Q4( s386 ),
+    .Q5( s387 ),
+    .Q6( s388 ),
+    .Q7( s389 ),
+    .Q8( s390 ),
+    .Q9( s391 ),
+    .Q10( s392 ),
+    .Q11( s393 ),
+    .Q12( s394 ),
+    .Q13( s395 ),
+    .Q14( s396 ),
+    .Q15( s397 )
   );
   \16_BitRegister  \16_BitRegister_i27 (
-    .D( s16 ),
-    .EN( s66 ),
-    .CLK( s436 ),
-    .Q0( s437 ),
-    .Q1( s438 ),
-    .Q2( s439 ),
-    .Q3( s440 ),
-    .Q4( s441 ),
-    .Q5( s442 ),
-    .Q6( s443 ),
-    .Q7( s444 ),
-    .Q8( s445 ),
-    .Q9( s446 ),
-    .Q10( s447 ),
-    .Q11( s448 ),
-    .Q12( s449 ),
-    .Q13( s450 ),
-    .Q14( s451 ),
-    .Q15( s452 )
+    .D( s20 ),
+    .EN( s63 ),
+    .CLK( CLK ),
+    .Q0( s398 ),
+    .Q1( s399 ),
+    .Q2( s400 ),
+    .Q3( s401 ),
+    .Q4( s402 ),
+    .Q5( s403 ),
+    .Q6( s404 ),
+    .Q7( s405 ),
+    .Q8( s406 ),
+    .Q9( s407 ),
+    .Q10( s408 ),
+    .Q11( s409 ),
+    .Q12( s410 ),
+    .Q13( s411 ),
+    .Q14( s412 ),
+    .Q15( s413 )
   );
-  Mux_4x1 Mux_4x1_i28 (
-    .sel( s466 ),
+  \16_BitRegister  \16_BitRegister_i28 (
+    .D( s2 ),
+    .EN( s64 ),
+    .CLK( CLK ),
+    .Q0( s414 ),
+    .Q1( s415 ),
+    .Q2( s416 ),
+    .Q3( s417 ),
+    .Q4( s418 ),
+    .Q5( s419 ),
+    .Q6( s420 ),
+    .Q7( s421 ),
+    .Q8( s422 ),
+    .Q9( s423 ),
+    .Q10( s424 ),
+    .Q11( s425 ),
+    .Q12( s426 ),
+    .Q13( s427 ),
+    .Q14( s428 ),
+    .Q15( s429 )
+  );
+  Mux_4x1 Mux_4x1_i29 (
+    .sel( s442 ),
     .in_0( 1'b0 ),
     .in_1( 1'b0 ),
     .in_2( 1'b1 ),
     .in_3( 1'b0 ),
-    .out( s462 )
+    .out( s438 )
   );
-  Mux_4x1 Mux_4x1_i29 (
-    .sel( s466 ),
+  Mux_4x1 Mux_4x1_i30 (
+    .sel( s442 ),
     .in_0( 1'b1 ),
     .in_1( 1'b0 ),
     .in_2( 1'b0 ),
     .in_3( 1'b0 ),
-    .out( s463 )
+    .out( s439 )
   );
-  Mux_4x1 Mux_4x1_i30 (
-    .sel( s466 ),
+  Mux_4x1 Mux_4x1_i31 (
+    .sel( s442 ),
     .in_0( 1'b0 ),
     .in_1( 1'b0 ),
     .in_2( 1'b0 ),
     .in_3( 1'b1 ),
-    .out( s464 )
+    .out( s440 )
   );
-  assign s341 = s35[3:0];
-  assign s343 = s35[3:0];
-  assign s363 = s35[3:0];
-  assign s455 = s35[3:0];
-  assign s14[0] = s19;
-  assign s14[1] = s20;
-  assign s14[2] = s21;
-  assign s14[3] = s22;
-  assign s14[4] = s23;
-  assign s14[5] = s24;
-  assign s14[6] = s25;
-  assign s14[7] = s26;
-  assign s14[8] = s27;
-  assign s14[9] = s28;
-  assign s14[10] = s29;
-  assign s14[11] = s30;
-  assign s14[12] = s31;
-  assign s14[13] = s32;
-  assign s14[14] = s33;
-  assign s14[15] = s34;
-  assign s15[0] = s37;
-  assign s15[1] = s38;
-  assign s15[2] = s39;
-  assign s15[3] = s40;
-  assign s15[4] = s41;
-  assign s15[5] = s42;
-  assign s15[6] = s43;
-  assign s15[7] = s44;
-  assign s15[8] = s45;
-  assign s15[9] = s46;
-  assign s15[10] = s47;
-  assign s15[11] = s48;
-  assign s15[12] = s49;
-  assign s15[13] = s50;
-  assign s15[14] = s51;
-  assign s15[15] = s52;
-  assign s85[0] = s69;
-  assign s85[1] = s70;
-  assign s85[2] = s71;
-  assign s85[3] = s72;
-  assign s85[4] = s73;
-  assign s85[5] = s74;
-  assign s85[6] = s75;
-  assign s85[7] = s76;
-  assign s85[8] = s77;
-  assign s85[9] = s78;
-  assign s85[10] = s79;
-  assign s85[11] = s80;
-  assign s85[12] = s81;
-  assign s85[13] = s82;
-  assign s85[14] = s83;
-  assign s85[15] = s84;
-  assign s103[0] = s87;
-  assign s103[1] = s88;
-  assign s103[2] = s89;
-  assign s103[3] = s90;
-  assign s103[4] = s91;
-  assign s103[5] = s92;
-  assign s103[6] = s93;
-  assign s103[7] = s94;
-  assign s103[8] = s95;
-  assign s103[9] = s96;
-  assign s103[10] = s97;
-  assign s103[11] = s98;
-  assign s103[12] = s99;
-  assign s103[13] = s100;
-  assign s103[14] = s101;
-  assign s103[15] = s102;
-  assign s121[0] = s105;
-  assign s121[1] = s106;
-  assign s121[2] = s107;
-  assign s121[3] = s108;
-  assign s121[4] = s109;
-  assign s121[5] = s110;
-  assign s121[6] = s111;
-  assign s121[7] = s112;
-  assign s121[8] = s113;
-  assign s121[9] = s114;
-  assign s121[10] = s115;
-  assign s121[11] = s116;
-  assign s121[12] = s117;
-  assign s121[13] = s118;
-  assign s121[14] = s119;
-  assign s121[15] = s120;
-  assign s139[0] = s123;
-  assign s139[1] = s124;
-  assign s139[2] = s125;
-  assign s139[3] = s126;
-  assign s139[4] = s127;
-  assign s139[5] = s128;
-  assign s139[6] = s129;
-  assign s139[7] = s130;
-  assign s139[8] = s131;
-  assign s139[9] = s132;
-  assign s139[10] = s133;
-  assign s139[11] = s134;
-  assign s139[12] = s135;
-  assign s139[13] = s136;
-  assign s139[14] = s137;
-  assign s139[15] = s138;
-  assign s158[0] = s142;
-  assign s158[1] = s143;
-  assign s158[2] = s144;
-  assign s158[3] = s145;
-  assign s158[4] = s146;
-  assign s158[5] = s147;
-  assign s158[6] = s148;
-  assign s158[7] = s149;
-  assign s158[8] = s150;
-  assign s158[9] = s151;
-  assign s158[10] = s152;
-  assign s158[11] = s153;
-  assign s158[12] = s154;
-  assign s158[13] = s155;
-  assign s158[14] = s156;
-  assign s158[15] = s157;
-  assign s176[0] = s160;
-  assign s176[1] = s161;
-  assign s176[2] = s162;
-  assign s176[3] = s163;
-  assign s176[4] = s164;
-  assign s176[5] = s165;
-  assign s176[6] = s166;
-  assign s176[7] = s167;
-  assign s176[8] = s168;
-  assign s176[9] = s169;
-  assign s176[10] = s170;
-  assign s176[11] = s171;
-  assign s176[12] = s172;
-  assign s176[13] = s173;
-  assign s176[14] = s174;
-  assign s176[15] = s175;
-  assign s178[0] = s181;
-  assign s178[1] = s182;
-  assign s178[2] = s183;
-  assign s178[3] = s184;
-  assign s178[4] = s185;
-  assign s178[5] = s186;
-  assign s178[6] = s187;
-  assign s178[7] = s188;
-  assign s178[8] = s189;
-  assign s178[9] = s190;
-  assign s178[10] = s191;
-  assign s178[11] = s192;
-  assign s178[12] = s193;
-  assign s178[13] = s194;
-  assign s178[14] = s195;
-  assign s178[15] = s196;
-  assign s179[0] = s198;
-  assign s179[1] = s199;
-  assign s179[2] = s200;
-  assign s179[3] = s201;
-  assign s179[4] = s202;
-  assign s179[5] = s203;
-  assign s179[6] = s204;
-  assign s179[7] = s205;
-  assign s179[8] = s206;
-  assign s179[9] = s207;
-  assign s179[10] = s208;
-  assign s179[11] = s209;
-  assign s179[12] = s210;
-  assign s179[13] = s211;
-  assign s179[14] = s212;
-  assign s179[15] = s213;
-  assign s231[0] = s215;
-  assign s231[1] = s216;
-  assign s231[2] = s217;
-  assign s231[3] = s218;
-  assign s231[4] = s219;
-  assign s231[5] = s220;
-  assign s231[6] = s221;
-  assign s231[7] = s222;
-  assign s231[8] = s223;
-  assign s231[9] = s224;
-  assign s231[10] = s225;
-  assign s231[11] = s226;
-  assign s231[12] = s227;
-  assign s231[13] = s228;
-  assign s231[14] = s229;
-  assign s231[15] = s230;
-  assign s249[0] = s233;
-  assign s249[1] = s234;
-  assign s249[2] = s235;
-  assign s249[3] = s236;
-  assign s249[4] = s237;
-  assign s249[5] = s238;
-  assign s249[6] = s239;
-  assign s249[7] = s240;
-  assign s249[8] = s241;
-  assign s249[9] = s242;
-  assign s249[10] = s243;
-  assign s249[11] = s244;
-  assign s249[12] = s245;
-  assign s249[13] = s246;
-  assign s249[14] = s247;
-  assign s249[15] = s248;
-  assign s267[0] = s251;
-  assign s267[1] = s252;
-  assign s267[2] = s253;
-  assign s267[3] = s254;
-  assign s267[4] = s255;
-  assign s267[5] = s256;
-  assign s267[6] = s257;
-  assign s267[7] = s258;
-  assign s267[8] = s259;
-  assign s267[9] = s260;
-  assign s267[10] = s261;
-  assign s267[11] = s262;
-  assign s267[12] = s263;
-  assign s267[13] = s264;
-  assign s267[14] = s265;
-  assign s267[15] = s266;
-  assign s285[0] = s269;
-  assign s285[1] = s270;
-  assign s285[2] = s271;
-  assign s285[3] = s272;
-  assign s285[4] = s273;
-  assign s285[5] = s274;
-  assign s285[6] = s275;
-  assign s285[7] = s276;
-  assign s285[8] = s277;
-  assign s285[9] = s278;
-  assign s285[10] = s279;
-  assign s285[11] = s280;
-  assign s285[12] = s281;
-  assign s285[13] = s282;
-  assign s285[14] = s283;
-  assign s285[15] = s284;
-  assign s303[0] = s287;
-  assign s303[1] = s288;
-  assign s303[2] = s289;
-  assign s303[3] = s290;
-  assign s303[4] = s291;
-  assign s303[5] = s292;
-  assign s303[6] = s293;
-  assign s303[7] = s294;
-  assign s303[8] = s295;
-  assign s303[9] = s296;
-  assign s303[10] = s297;
-  assign s303[11] = s298;
-  assign s303[12] = s299;
-  assign s303[13] = s300;
-  assign s303[14] = s301;
-  assign s303[15] = s302;
-  assign s321[0] = s305;
-  assign s321[1] = s306;
-  assign s321[2] = s307;
-  assign s321[3] = s308;
-  assign s321[4] = s309;
-  assign s321[5] = s310;
-  assign s321[6] = s311;
-  assign s321[7] = s312;
-  assign s321[8] = s313;
-  assign s321[9] = s314;
-  assign s321[10] = s315;
-  assign s321[11] = s316;
-  assign s321[12] = s317;
-  assign s321[13] = s318;
-  assign s321[14] = s319;
-  assign s321[15] = s320;
-  assign s339[0] = s323;
-  assign s339[1] = s324;
-  assign s339[2] = s325;
-  assign s339[3] = s326;
-  assign s339[4] = s327;
-  assign s339[5] = s328;
-  assign s339[6] = s329;
-  assign s339[7] = s330;
-  assign s339[8] = s331;
-  assign s339[9] = s332;
-  assign s339[10] = s333;
-  assign s339[11] = s334;
-  assign s339[12] = s335;
-  assign s339[13] = s336;
-  assign s339[14] = s337;
-  assign s339[15] = s338;
-  assign s361[0] = s345;
-  assign s361[1] = s346;
-  assign s361[2] = s347;
-  assign s361[3] = s348;
-  assign s361[4] = s349;
-  assign s361[5] = s350;
-  assign s361[6] = s351;
-  assign s361[7] = s352;
-  assign s361[8] = s353;
-  assign s361[9] = s354;
-  assign s361[10] = s355;
-  assign s361[11] = s356;
-  assign s361[12] = s357;
-  assign s361[13] = s358;
-  assign s361[14] = s359;
-  assign s361[15] = s360;
-  assign s364[0] = s367;
-  assign s364[1] = s368;
-  assign s364[2] = s369;
-  assign s364[3] = s370;
-  assign s364[4] = s371;
-  assign s364[5] = s372;
-  assign s364[6] = s373;
-  assign s364[7] = s374;
-  assign s364[8] = s375;
-  assign s364[9] = s376;
-  assign s364[10] = s377;
-  assign s364[11] = s378;
-  assign s364[12] = s379;
-  assign s364[13] = s380;
-  assign s364[14] = s381;
-  assign s364[15] = s382;
-  assign s365[0] = s384;
-  assign s365[1] = s385;
-  assign s365[2] = s386;
-  assign s365[3] = s387;
-  assign s365[4] = s388;
-  assign s365[5] = s389;
-  assign s365[6] = s390;
-  assign s365[7] = s391;
-  assign s365[8] = s392;
-  assign s365[9] = s393;
-  assign s365[10] = s394;
-  assign s365[11] = s395;
-  assign s365[12] = s396;
-  assign s365[13] = s397;
-  assign s365[14] = s398;
-  assign s365[15] = s399;
-  assign s400[0] = s403;
-  assign s400[1] = s404;
-  assign s400[2] = s405;
-  assign s400[3] = s406;
-  assign s400[4] = s407;
-  assign s400[5] = s408;
-  assign s400[6] = s409;
-  assign s400[7] = s410;
-  assign s400[8] = s411;
-  assign s400[9] = s412;
-  assign s400[10] = s413;
-  assign s400[11] = s414;
-  assign s400[12] = s415;
-  assign s400[13] = s416;
-  assign s400[14] = s417;
-  assign s400[15] = s418;
-  assign s401[0] = s420;
-  assign s401[1] = s421;
-  assign s401[2] = s422;
-  assign s401[3] = s423;
-  assign s401[4] = s424;
-  assign s401[5] = s425;
-  assign s401[6] = s426;
-  assign s401[7] = s427;
-  assign s401[8] = s428;
-  assign s401[9] = s429;
-  assign s401[10] = s430;
-  assign s401[11] = s431;
-  assign s401[12] = s432;
-  assign s401[13] = s433;
-  assign s401[14] = s434;
-  assign s401[15] = s435;
-  assign s453[0] = s437;
-  assign s453[1] = s438;
-  assign s453[2] = s439;
-  assign s453[3] = s440;
-  assign s453[4] = s441;
-  assign s453[5] = s442;
-  assign s453[6] = s443;
-  assign s453[7] = s444;
-  assign s453[8] = s445;
-  assign s453[9] = s446;
-  assign s453[10] = s447;
-  assign s453[11] = s448;
-  assign s453[12] = s449;
-  assign s453[13] = s450;
-  assign s453[14] = s451;
-  assign s453[15] = s452;
-  // 4-bit reg
-  DIG_Register_BUS #(
-    .Bits(4)
-  )
-  DIG_Register_BUS_i31 (
-    .D( s455 ),
-    .C( s454 ),
-    .en( s66 ),
-    .Q( s456 )
-  );
+  assign s324 = s20[3:0];
+  assign s325 = s20[3:0];
+  assign s343 = s20[3:0];
+  assign s431 = s20[3:0];
+  assign s0[0] = s4;
+  assign s0[1] = s5;
+  assign s0[2] = s6;
+  assign s0[3] = s7;
+  assign s0[4] = s8;
+  assign s0[5] = s9;
+  assign s0[6] = s10;
+  assign s0[7] = s11;
+  assign s0[8] = s12;
+  assign s0[9] = s13;
+  assign s0[10] = s14;
+  assign s0[11] = s15;
+  assign s0[12] = s16;
+  assign s0[13] = s17;
+  assign s0[14] = s18;
+  assign s0[15] = s19;
+  assign s1[0] = s21;
+  assign s1[1] = s22;
+  assign s1[2] = s23;
+  assign s1[3] = s24;
+  assign s1[4] = s25;
+  assign s1[5] = s26;
+  assign s1[6] = s27;
+  assign s1[7] = s28;
+  assign s1[8] = s29;
+  assign s1[9] = s30;
+  assign s1[10] = s31;
+  assign s1[11] = s32;
+  assign s1[12] = s33;
+  assign s1[13] = s34;
+  assign s1[14] = s35;
+  assign s1[15] = s36;
+  assign s83[0] = s67;
+  assign s83[1] = s68;
+  assign s83[2] = s69;
+  assign s83[3] = s70;
+  assign s83[4] = s71;
+  assign s83[5] = s72;
+  assign s83[6] = s73;
+  assign s83[7] = s74;
+  assign s83[8] = s75;
+  assign s83[9] = s76;
+  assign s83[10] = s77;
+  assign s83[11] = s78;
+  assign s83[12] = s79;
+  assign s83[13] = s80;
+  assign s83[14] = s81;
+  assign s83[15] = s82;
+  assign s100[0] = s84;
+  assign s100[1] = s85;
+  assign s100[2] = s86;
+  assign s100[3] = s87;
+  assign s100[4] = s88;
+  assign s100[5] = s89;
+  assign s100[6] = s90;
+  assign s100[7] = s91;
+  assign s100[8] = s92;
+  assign s100[9] = s93;
+  assign s100[10] = s94;
+  assign s100[11] = s95;
+  assign s100[12] = s96;
+  assign s100[13] = s97;
+  assign s100[14] = s98;
+  assign s100[15] = s99;
+  assign s117[0] = s101;
+  assign s117[1] = s102;
+  assign s117[2] = s103;
+  assign s117[3] = s104;
+  assign s117[4] = s105;
+  assign s117[5] = s106;
+  assign s117[6] = s107;
+  assign s117[7] = s108;
+  assign s117[8] = s109;
+  assign s117[9] = s110;
+  assign s117[10] = s111;
+  assign s117[11] = s112;
+  assign s117[12] = s113;
+  assign s117[13] = s114;
+  assign s117[14] = s115;
+  assign s117[15] = s116;
+  assign s134[0] = s118;
+  assign s134[1] = s119;
+  assign s134[2] = s120;
+  assign s134[3] = s121;
+  assign s134[4] = s122;
+  assign s134[5] = s123;
+  assign s134[6] = s124;
+  assign s134[7] = s125;
+  assign s134[8] = s126;
+  assign s134[9] = s127;
+  assign s134[10] = s128;
+  assign s134[11] = s129;
+  assign s134[12] = s130;
+  assign s134[13] = s131;
+  assign s134[14] = s132;
+  assign s134[15] = s133;
+  assign s152[0] = s136;
+  assign s152[1] = s137;
+  assign s152[2] = s138;
+  assign s152[3] = s139;
+  assign s152[4] = s140;
+  assign s152[5] = s141;
+  assign s152[6] = s142;
+  assign s152[7] = s143;
+  assign s152[8] = s144;
+  assign s152[9] = s145;
+  assign s152[10] = s146;
+  assign s152[11] = s147;
+  assign s152[12] = s148;
+  assign s152[13] = s149;
+  assign s152[14] = s150;
+  assign s152[15] = s151;
+  assign s169[0] = s153;
+  assign s169[1] = s154;
+  assign s169[2] = s155;
+  assign s169[3] = s156;
+  assign s169[4] = s157;
+  assign s169[5] = s158;
+  assign s169[6] = s159;
+  assign s169[7] = s160;
+  assign s169[8] = s161;
+  assign s169[9] = s162;
+  assign s169[10] = s163;
+  assign s169[11] = s164;
+  assign s169[12] = s165;
+  assign s169[13] = s166;
+  assign s169[14] = s167;
+  assign s169[15] = s168;
+  assign s171[0] = s173;
+  assign s171[1] = s174;
+  assign s171[2] = s175;
+  assign s171[3] = s176;
+  assign s171[4] = s177;
+  assign s171[5] = s178;
+  assign s171[6] = s179;
+  assign s171[7] = s180;
+  assign s171[8] = s181;
+  assign s171[9] = s182;
+  assign s171[10] = s183;
+  assign s171[11] = s184;
+  assign s171[12] = s185;
+  assign s171[13] = s186;
+  assign s171[14] = s187;
+  assign s171[15] = s188;
+  assign s172[0] = s189;
+  assign s172[1] = s190;
+  assign s172[2] = s191;
+  assign s172[3] = s192;
+  assign s172[4] = s193;
+  assign s172[5] = s194;
+  assign s172[6] = s195;
+  assign s172[7] = s196;
+  assign s172[8] = s197;
+  assign s172[9] = s198;
+  assign s172[10] = s199;
+  assign s172[11] = s200;
+  assign s172[12] = s201;
+  assign s172[13] = s202;
+  assign s172[14] = s203;
+  assign s172[15] = s204;
+  assign s221[0] = s205;
+  assign s221[1] = s206;
+  assign s221[2] = s207;
+  assign s221[3] = s208;
+  assign s221[4] = s209;
+  assign s221[5] = s210;
+  assign s221[6] = s211;
+  assign s221[7] = s212;
+  assign s221[8] = s213;
+  assign s221[9] = s214;
+  assign s221[10] = s215;
+  assign s221[11] = s216;
+  assign s221[12] = s217;
+  assign s221[13] = s218;
+  assign s221[14] = s219;
+  assign s221[15] = s220;
+  assign s238[0] = s222;
+  assign s238[1] = s223;
+  assign s238[2] = s224;
+  assign s238[3] = s225;
+  assign s238[4] = s226;
+  assign s238[5] = s227;
+  assign s238[6] = s228;
+  assign s238[7] = s229;
+  assign s238[8] = s230;
+  assign s238[9] = s231;
+  assign s238[10] = s232;
+  assign s238[11] = s233;
+  assign s238[12] = s234;
+  assign s238[13] = s235;
+  assign s238[14] = s236;
+  assign s238[15] = s237;
+  assign s255[0] = s239;
+  assign s255[1] = s240;
+  assign s255[2] = s241;
+  assign s255[3] = s242;
+  assign s255[4] = s243;
+  assign s255[5] = s244;
+  assign s255[6] = s245;
+  assign s255[7] = s246;
+  assign s255[8] = s247;
+  assign s255[9] = s248;
+  assign s255[10] = s249;
+  assign s255[11] = s250;
+  assign s255[12] = s251;
+  assign s255[13] = s252;
+  assign s255[14] = s253;
+  assign s255[15] = s254;
+  assign s272[0] = s256;
+  assign s272[1] = s257;
+  assign s272[2] = s258;
+  assign s272[3] = s259;
+  assign s272[4] = s260;
+  assign s272[5] = s261;
+  assign s272[6] = s262;
+  assign s272[7] = s263;
+  assign s272[8] = s264;
+  assign s272[9] = s265;
+  assign s272[10] = s266;
+  assign s272[11] = s267;
+  assign s272[12] = s268;
+  assign s272[13] = s269;
+  assign s272[14] = s270;
+  assign s272[15] = s271;
+  assign s289[0] = s273;
+  assign s289[1] = s274;
+  assign s289[2] = s275;
+  assign s289[3] = s276;
+  assign s289[4] = s277;
+  assign s289[5] = s278;
+  assign s289[6] = s279;
+  assign s289[7] = s280;
+  assign s289[8] = s281;
+  assign s289[9] = s282;
+  assign s289[10] = s283;
+  assign s289[11] = s284;
+  assign s289[12] = s285;
+  assign s289[13] = s286;
+  assign s289[14] = s287;
+  assign s289[15] = s288;
+  assign s306[0] = s290;
+  assign s306[1] = s291;
+  assign s306[2] = s292;
+  assign s306[3] = s293;
+  assign s306[4] = s294;
+  assign s306[5] = s295;
+  assign s306[6] = s296;
+  assign s306[7] = s297;
+  assign s306[8] = s298;
+  assign s306[9] = s299;
+  assign s306[10] = s300;
+  assign s306[11] = s301;
+  assign s306[12] = s302;
+  assign s306[13] = s303;
+  assign s306[14] = s304;
+  assign s306[15] = s305;
+  assign s323[0] = s307;
+  assign s323[1] = s308;
+  assign s323[2] = s309;
+  assign s323[3] = s310;
+  assign s323[4] = s311;
+  assign s323[5] = s312;
+  assign s323[6] = s313;
+  assign s323[7] = s314;
+  assign s323[8] = s315;
+  assign s323[9] = s316;
+  assign s323[10] = s317;
+  assign s323[11] = s318;
+  assign s323[12] = s319;
+  assign s323[13] = s320;
+  assign s323[14] = s321;
+  assign s323[15] = s322;
+  assign s342[0] = s326;
+  assign s342[1] = s327;
+  assign s342[2] = s328;
+  assign s342[3] = s329;
+  assign s342[4] = s330;
+  assign s342[5] = s331;
+  assign s342[6] = s332;
+  assign s342[7] = s333;
+  assign s342[8] = s334;
+  assign s342[9] = s335;
+  assign s342[10] = s336;
+  assign s342[11] = s337;
+  assign s342[12] = s338;
+  assign s342[13] = s339;
+  assign s342[14] = s340;
+  assign s342[15] = s341;
+  assign s344[0] = s347;
+  assign s344[1] = s348;
+  assign s344[2] = s349;
+  assign s344[3] = s350;
+  assign s344[4] = s351;
+  assign s344[5] = s352;
+  assign s344[6] = s353;
+  assign s344[7] = s354;
+  assign s344[8] = s355;
+  assign s344[9] = s356;
+  assign s344[10] = s357;
+  assign s344[11] = s358;
+  assign s344[12] = s359;
+  assign s344[13] = s360;
+  assign s344[14] = s361;
+  assign s344[15] = s362;
+  assign s345[0] = s363;
+  assign s345[1] = s364;
+  assign s345[2] = s365;
+  assign s345[3] = s366;
+  assign s345[4] = s367;
+  assign s345[5] = s368;
+  assign s345[6] = s369;
+  assign s345[7] = s370;
+  assign s345[8] = s371;
+  assign s345[9] = s372;
+  assign s345[10] = s373;
+  assign s345[11] = s374;
+  assign s345[12] = s375;
+  assign s345[13] = s376;
+  assign s345[14] = s377;
+  assign s345[15] = s378;
+  assign s379[0] = s382;
+  assign s379[1] = s383;
+  assign s379[2] = s384;
+  assign s379[3] = s385;
+  assign s379[4] = s386;
+  assign s379[5] = s387;
+  assign s379[6] = s388;
+  assign s379[7] = s389;
+  assign s379[8] = s390;
+  assign s379[9] = s391;
+  assign s379[10] = s392;
+  assign s379[11] = s393;
+  assign s379[12] = s394;
+  assign s379[13] = s395;
+  assign s379[14] = s396;
+  assign s379[15] = s397;
+  assign s380[0] = s398;
+  assign s380[1] = s399;
+  assign s380[2] = s400;
+  assign s380[3] = s401;
+  assign s380[4] = s402;
+  assign s380[5] = s403;
+  assign s380[6] = s404;
+  assign s380[7] = s405;
+  assign s380[8] = s406;
+  assign s380[9] = s407;
+  assign s380[10] = s408;
+  assign s380[11] = s409;
+  assign s380[12] = s410;
+  assign s380[13] = s411;
+  assign s380[14] = s412;
+  assign s380[15] = s413;
+  assign s430[0] = s414;
+  assign s430[1] = s415;
+  assign s430[2] = s416;
+  assign s430[3] = s417;
+  assign s430[4] = s418;
+  assign s430[5] = s419;
+  assign s430[6] = s420;
+  assign s430[7] = s421;
+  assign s430[8] = s422;
+  assign s430[9] = s423;
+  assign s430[10] = s424;
+  assign s430[11] = s425;
+  assign s430[12] = s426;
+  assign s430[13] = s427;
+  assign s430[14] = s428;
+  assign s430[15] = s429;
   // 4-bit reg
   DIG_Register_BUS #(
     .Bits(4)
   )
   DIG_Register_BUS_i32 (
-    .D( s363 ),
-    .C( s362 ),
-    .en( s63 ),
-    .Q( s457 )
+    .D( s431 ),
+    .C( CLK ),
+    .en( s64 ),
+    .Q( s432 )
   );
   // 4-bit reg
   DIG_Register_BUS #(
     .Bits(4)
   )
   DIG_Register_BUS_i33 (
-    .D( s341 ),
-    .C( s340 ),
-    .en( s62 ),
-    .Q( s458 )
+    .D( s343 ),
+    .C( CLK ),
+    .en( s61 ),
+    .Q( s433 )
   );
   // 4-bit reg
   DIG_Register_BUS #(
     .Bits(4)
   )
   DIG_Register_BUS_i34 (
-    .D( s343 ),
-    .C( s342 ),
-    .en( s61 ),
-    .Q( s459 )
+    .D( s324 ),
+    .C( CLK ),
+    .en( s60 ),
+    .Q( s434 )
+  );
+  // 4-bit reg
+  DIG_Register_BUS #(
+    .Bits(4)
+  )
+  DIG_Register_BUS_i35 (
+    .D( s325 ),
+    .C( CLK ),
+    .en( s59 ),
+    .Q( s435 )
   );
   DIG_Add #(
     .Bits(16)
   )
-  DIG_Add_i35 (
-    .a( s14 ),
-    .b( s15 ),
+  DIG_Add_i36 (
+    .a( s0 ),
+    .b( s1 ),
     .c_i( Carry_In ),
-    .s( Sum ),
-    .c_o( Carry_Out )
+    .s( SUM ),
+    .c_o( CARRY )
   );
   DIG_Sub #(
     .Bits(16)
   )
-  DIG_Sub_i36 (
-    .a( s85 ),
-    .b( s103 ),
+  DIG_Sub_i37 (
+    .a( s83 ),
+    .b( s100 ),
     .c_i( Borrow_In ),
-    .s( Sub ),
-    .c_o( Borrow_Out )
-  );
-  DIG_Mul_signed #(
-    .Bits(16)
-  )
-  DIG_Mul_signed_i37 (
-    .a( s121 ),
-    .b( s139 ),
-    .mul( s140 )
+    .s( SUB ),
+    .c_o( BORROW )
   );
   DIG_Mul_signed #(
     .Bits(16)
   )
   DIG_Mul_signed_i38 (
-    .a( s158 ),
-    .b( s176 ),
-    .mul( s177 )
+    .a( s117 ),
+    .b( s134 ),
+    .mul( s135 )
   );
-  \16_BitAndOP  \16_BitAndOP_i39 (
-    .A( s178 ),
-    .B( s179 ),
+  DIG_Mul_signed #(
+    .Bits(16)
+  )
+  DIG_Mul_signed_i39 (
+    .a( s152 ),
+    .b( s169 ),
+    .mul( s170 )
+  );
+  \16_BitAndOP  \16_BitAndOP_i40 (
+    .A( s171 ),
+    .B( s172 ),
     .Q( \AND  )
   );
-  \16_BitXorOP  \16_BitXorOP_i40 (
-    .A( s231 ),
-    .B( s249 ),
+  \16_BitXorOP  \16_BitXorOP_i41 (
+    .A( s221 ),
+    .B( s238 ),
     .Q( \XOR  )
   );
-  \16_BitOrOP  \16_BitOrOP_i41 (
-    .A( s267 ),
-    .B( s285 ),
+  \16_BitOrOP  \16_BitOrOP_i42 (
+    .A( s255 ),
+    .B( s272 ),
     .Q( \OR  )
   );
-  \16_BitNotOP  \16_BitNotOP_i42 (
-    .D( s303 ),
-    .Q( \Not  )
+  \16_BitNotOP  \16_BitNotOP_i43 (
+    .D( s289 ),
+    .Q( \NOT  )
   );
   CompSigned #(
     .Bits(16)
   )
-  CompSigned_i43 (
-    .a( s364 ),
-    .b( s365 ),
-    .\< ( SLT )
+  CompSigned_i44 (
+    .a( s344 ),
+    .b( s345 ),
+    .\< ( s346 )
   );
   CompUnsigned #(
     .Bits(16)
   )
-  CompUnsigned_i44 (
-    .a( s400 ),
-    .b( s401 ),
-    .\< ( SLTU )
+  CompUnsigned_i45 (
+    .a( s379 ),
+    .b( s380 ),
+    .\< ( s381 )
   );
   Mux_4x1_NBits #(
     .Bits(16)
   )
-  Mux_4x1_NBits_i45 (
-    .sel( s466 ),
-    .in_0( s321 ),
-    .in_1( s339 ),
-    .in_2( s361 ),
-    .in_3( s453 ),
-    .out( s460 )
+  Mux_4x1_NBits_i46 (
+    .sel( s442 ),
+    .in_0( s306 ),
+    .in_1( s323 ),
+    .in_2( s342 ),
+    .in_3( s430 ),
+    .out( s436 )
   );
   Mux_4x1_NBits #(
     .Bits(4)
   )
-  Mux_4x1_NBits_i46 (
-    .sel( s466 ),
-    .in_0( s459 ),
-    .in_1( s458 ),
-    .in_2( s457 ),
-    .in_3( s456 ),
-    .out( s461 )
+  Mux_4x1_NBits_i47 (
+    .sel( s442 ),
+    .in_0( s435 ),
+    .in_1( s434 ),
+    .in_2( s433 ),
+    .in_3( s432 ),
+    .out( s437 )
   );
-  Barrel_Shifter Barrel_Shifter_i47 (
-    .DATA_IN( s460 ),
-    .SHIFT_AMT( s461 ),
-    .\IsLeft? ( s462 ),
-    .ARIGHT_LOGIC( s463 ),
-    .\IsRotate? ( s464 ),
-    .DATA_OUT( s465 )
+  Barrel_Shifter Barrel_Shifter_i48 (
+    .DATA_IN( s436 ),
+    .SHIFT_AMT( s437 ),
+    .\IsLeft? ( s438 ),
+    .ARIGHT_LOGIC( s439 ),
+    .\IsRotate? ( s440 ),
+    .DATA_OUT( s441 )
   );
-  assign mul_low = s140[15:0];
-  assign mul_high = s177[31:16];
+  assign SLT[0] = s346;
+  assign SLT[15:1] = 15'b0;
+  assign SLTU[0] = s381;
+  assign SLTU[15:1] = 15'b0;
+  assign MUL_LOW = s135[15:0];
+  assign MUL_HIGH = s170[31:16];
   DemuxBus2 #(
     .Bits(16),
     .Default(0)
   )
-  DemuxBus2_i48 (
-    .sel( s466 ),
-    .in( s465 ),
+  DemuxBus2_i49 (
+    .sel( s442 ),
+    .in( s441 ),
     .out_0( SAR ),
     .out_1( SHR ),
     .out_2( SHL ),
     .out_3( ROR )
   );
+  Mux_16x1_NBits #(
+    .Bits(16)
+  )
+  Mux_16x1_NBits_i50 (
+    .sel( s66 ),
+    .in_0( SUM ),
+    .in_1( SUB ),
+    .in_2( MUL_LOW ),
+    .in_3( MUL_HIGH ),
+    .in_4( \AND  ),
+    .in_5( \XOR  ),
+    .in_6( \OR  ),
+    .in_7( \NOT  ),
+    .in_8( SAR ),
+    .in_9( SHR ),
+    .in_10( SHL ),
+    .in_11( SLT ),
+    .in_12( SLTU ),
+    .in_13( ROR ),
+    .in_14( 16'b0 ),
+    .in_15( 16'b0 ),
+    .out( OUT )
+  );
+  DIG_Counter_Nbit #(
+    .Bits(2)
+  )
+  DIG_Counter_Nbit_i51 (
+    .en( s443 ),
+    .C( CLK ),
+    .clr( s444 ),
+    .out( s445 ),
+    .ovf( s446 )
+  );
+  assign s444 = (s65 | s446);
+  assign WE = (s445[0] & s445[1]);
+  assign SCU_EN = SCU_EN_temp;
   assign LSU_EN = LSU_EN_temp;
-  assign SERACC_EN = SERACC_EN_temp;
 endmodule
